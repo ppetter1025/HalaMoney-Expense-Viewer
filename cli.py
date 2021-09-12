@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import argparse
 import csv
 import datetime
@@ -52,6 +53,7 @@ COMPARABLE_FIELDS = [
 ]
 
 class Expense:
+
   def __init__(self, expenses=None):
     if isinstance(expenses, list):
       self.expenses = expenses
@@ -64,6 +66,7 @@ class Expense:
       for field, value in expense.items():
         if subquery in value:
           return_list += [expense]
+          break
     return return_list
 
   def QueryField(self, field, op, field_query):
@@ -174,7 +177,8 @@ def main():
   if args.input_file is None:
     csv_file = sys.stdin
   else:
-    csv_file = open(args.input_file, 'r')
+    with open(args.input_file, 'r') as gp:
+      csv_file = fp
 
   all_expenses = Expense(csv_file)
 
@@ -186,4 +190,5 @@ def main():
   base_expenses.Query(args.query).Output(base_expenses.TotalAmount())
 
 
-main()
+if __name__ == '__main__':
+  main()
