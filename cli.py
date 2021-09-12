@@ -46,7 +46,9 @@ DEFAULT_FIELD_ORDER = [
 ] 
 
 COMPARABLE_FIELDS = [
+    'id',
     'date',
+    'amount'
 ]
 
 class Expense:
@@ -66,61 +68,75 @@ class Expense:
 
   def QueryField(self, field, op, field_query):
     def hit(field, op, field_query, value):
-      if field == 'date':
-        field_query = datetime.datetime.fromisoformat(field_query.replace('/', '-'))
-        value = datetime.datetime.fromisoformat(value.replace('/', '-'))
+      if op == ':':
+        return field_query in value
 
+      if field not in COMPARABLE_FIELDS:
+        logging.error('Uncomparable field: %s', field)
+        raise ValueError('Field %s is not comparable.', field)
+
+      if field == 'date':
+        field_query = datetime.datetime.fromisoformat(
+            field_query.replace('/', '-'))
+        value = datetime.datetime.fromisoformat(value.replace('/', '-'))
+      else:
+        value = int(value)
+        field_query = int(field_query)
       if op == '<':
         return value < field_query
       if op == '>':
         return value > field_query
+      if op == '<=':
+        return value <= field_query
+      if op == '>=':
+        return value >= field_query
       
       assert False
 
     return_list = []
-    if op == ':':
-      for expense in self.expenses:
-        if field_query in expense[FIELD_MAPPING[field]]:
-          return_list += [expense]
-    else:
-      if field not in COMPARABLE_FIELDS:
-        logging.error('Uncomparable field: %s', field)
-      
-      for expense in self.expenses:
-        if hit(field, op, field_query, expense[FIELD_MAPPING[field]]):
-          return_list += [expense]
+    for expense in self.expenses:
+      if hit(field, op, field_query, expense[FIELD_MAPPING[field]]):
+        return_list += [expense]
 
     return return_list
 
   def Query(self, query):
     def Intersection(lst1, lst2):
+      if lst1 is None or lst2 is None:
+        return lst1 if lst2 is None else lst2
       return [value for value in lst1 if value in lst2]
 
+    if query == '':
+        return self
+
+    # Use None as universal set.
     result = None
-    field_operators = [':', '<', '>']
+    # Check >=, <= before >, <
+    field_operators = [':', '>=', '<=', '<', '>']
     for subquery in query.split():
-      field = None
       for op in field_operators:
         if op in subquery:
-          field, field_query = subquery.split(op, 1)
+          subquery = subquery.replace(op, ' ')
+          assert len(subquery.split()) == 2
+          field, field_query = subquery.split(' ', 1)
           subquery_res = self.QueryField(field, op, field_query)
           break
       else:
         subquery_res = self.QueryAll(subquery)
 
-      if result is None:
-        result = subquery_res
-      else:
-        result = Intersection(result, subquery_res)
+      result = Intersection(result, subquery_res)
 
     return Expense(result)
   
   def TotalAmount(self):
-    return sum([int(expense[FIELD_MAPPING['amount']]) for expense in self.expenses])
+    return sum([int(expense[FIELD_MAPPING['amount']]) for expense in
+      self.expenses])
   
   def Output(self, base_total_amount=None):
     def FormatPrint(s, l, padding_character=' '):
       num_of_spaces = l - 2*len(s) + sum([len(c.encode()) != 3 for c in s]) 
+      # Replace the newline characters
+      s = s.replace('\n', ' ')
       print(s, end=padding_character*num_of_spaces)
 
     def PrintDashLine():
@@ -139,18 +155,19 @@ class Expense:
 
     PrintDashLine()
     print('總金額：%d' % self.TotalAmount(), end='')
-    if base_total_amount is not None:
+    if base_total_amount is not None and base_total_amount != 0:
       print(', 佔全部比例 %.2f%%' % (100.0*self.TotalAmount()/base_total_amount))
 
 
 def main():
-  parser = argparse.ArgumentParser()
-  parser.add_argument('-q', '--query', dest='query', type=str, required=True,
+  parser = argparse.ArgumentParser(epilog='Supported keywords: %r' % list(FIELD_MAPPING.keys()))
+  parser.add_argument('-q', '--query', dest='query', type=str, default='',
                       help='Query string')
   parser.add_argument('-b', '--base-query', dest='base_query',
                       help='Base query string')
   parser.add_argument('-i', '--input', dest='input_file', default=None,
-                      help='Path to the expense CSV file.  Read from STDIN if not given')
+                      help='Path to the expense CSV file.  Read from STDIN if '
+                           'not given')
 
   args = parser.parse_args()
 
