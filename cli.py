@@ -44,7 +44,7 @@ DEFAULT_FIELD_ORDER = [
     'amount',
     'description',
     'label',
-] 
+]
 
 COMPARABLE_FIELDS = [
     'id',
@@ -52,15 +52,36 @@ COMPARABLE_FIELDS = [
     'amount'
 ]
 
+
+def Tokenize(s):
+  s.strip()
+  if s == '':
+    return []
+
+  if s[0] == '(':
+    # Find matching parenthesis
+    cnt = 1
+    for i in range(1, len(s)):
+      if s[i] == '(':
+        cnt += 1
+      if s[i] == ')':
+        cnt -= 1
+      if cnt == 0:
+        return [s[:i+1]] + Tokenize(s[i+2:])
+    raise ValueError('Failed to parse the query')
+
+  splitted = s.split(' ', 1)
+  if len(splitted) == 1:
+    return splitted
+  return splitted[:1] + Tokenize(splitted[1])
+
 class Expense:
 
-  def __init__(self, expenses=None):
-    if isinstance(expenses, list):
-      self.expenses = expenses
-    else:
-      self.expenses = list(csv.DictReader(expenses))
+  def __init__(self, expenses: list):
+    assert isinstance(expenses, list)
+    self.expenses = expenses
 
-  def QueryAll(self, subquery):
+  def QueryAllFields(self, subquery):
     return_list = []
     for expense in self.expenses:
       for field, value in expense.items():
@@ -93,7 +114,7 @@ class Expense:
         return value <= field_query
       if op == '>=':
         return value >= field_query
-      
+
       assert False
 
     return_list = []
@@ -103,41 +124,49 @@ class Expense:
 
     return return_list
 
-  def Query(self, query):
-    def Intersection(lst1, lst2):
-      if lst1 is None or lst2 is None:
-        return lst1 if lst2 is None else lst2
-      return [value for value in lst1 if value in lst2]
+  def QueryOne(self, query):
+    # Check >=, <= before >, <
+    field_operators = [':', '>=', '<=', '<', '>']
+    for op in field_operators:
+      if op in query:
+        query = query.replace(op, ' ')
+        assert len(query.split()) == 2
+        field, field_query = query.split(' ', 1)
+        return self.QueryField(field, op, field_query)
 
-    if query == '':
+    return self.QueryAllFields(query)
+
+  def Query(self, query):
+
+    def Union(exp1, exp2):
+      return list(set(exp1.expenses).union(set(exp2.expenses)))
+
+    def Intersection(exp1, exp2):
+      if exp1 is None or exp2 is None:
+        return exp1 if exp2 is None else exp2
+      return Expense([value for value in exp1.expenses if value in exp2.expenses])
+
+    tokens = Tokenize(query)
+    if tokens == []:
         return self
+
+    if len(tokens) == 1:
+      return Expense(self.QueryOne(tokens[0]))
 
     # Use None as universal set.
     result = None
-    # Check >=, <= before >, <
-    field_operators = [':', '>=', '<=', '<', '>']
-    for subquery in query.split():
-      for op in field_operators:
-        if op in subquery:
-          subquery = subquery.replace(op, ' ')
-          assert len(subquery.split()) == 2
-          field, field_query = subquery.split(' ', 1)
-          subquery_res = self.QueryField(field, op, field_query)
-          break
-      else:
-        subquery_res = self.QueryAll(subquery)
+    for token in tokens:
+      result = Intersection(result, self.Query(token))
 
-      result = Intersection(result, subquery_res)
+    return result
 
-    return Expense(result)
-  
   def TotalAmount(self):
     return sum([int(expense[FIELD_MAPPING['amount']]) for expense in
       self.expenses])
-  
+
   def Output(self, base_total_amount=None):
     def FormatPrint(s, l, padding_character=' '):
-      num_of_spaces = l - 2*len(s) + sum([len(c.encode()) != 3 for c in s]) 
+      num_of_spaces = l - 2*len(s) + sum([len(c.encode()) != 3 for c in s])
       # Replace the newline characters
       s = s.replace('\n', ' ')
       print(s, end=padding_character*num_of_spaces)
@@ -175,12 +204,11 @@ def main():
   args = parser.parse_args()
 
   if args.input_file is None:
-    csv_file = sys.stdin
+    csv_file_fp = sys.stdin
   else:
-    with open(args.input_file, 'r') as gp:
-      csv_file = fp
+    csv_file_fp = open(args.input_file, 'r')
 
-  all_expenses = Expense(csv_file)
+  all_expenses = Expense(list(csv.DictReader(csv_file_fp)))
 
   if args.base_query is not None:
     base_expenses = all_expenses.Query(args.base_query)
