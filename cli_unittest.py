@@ -46,13 +46,16 @@ class ExpenseTest(unittest.TestCase):
   def testQueryNot(self):
     self._QueryTestHelper('-東門 -amount>=250', ['4', '6', '8'])
 
-  """
+  def testQueryDoubleNot(self):
+    self._QueryTestHelper('--拉麵', ['1', '7', '8'])
+
   def testQueryNotWithParenthesis(self):
     self._QueryTestHelper('-(amount>=200 食)', ['2', '3', '4', '5'])
 
-  def testQueryMultipleParenthesis(self):
+  def testQueryMultipleParentheses(self):
     self._QueryTestHelper('(((-東門 -amount>=250)))', ['4', '6', '8'])
 
+  """
   def testQueryOr(self):
     self._QueryTestHelper('東門 OR amount>=500', ['2', '3', '5'])
 

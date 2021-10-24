@@ -125,8 +125,12 @@ class Expense:
     return return_list
 
   def _QueryOneToken(self, query) -> Expense:
-    inverse = query.startswith('-')
-    query = query.lstrip('-')
+    if query.startswith('-'):
+      return self._GetComplementSet(self._QueryOneToken(query[1:]))
+
+    if query.startswith('('):
+      assert query[-1] == ')'
+      return self.Query(query[1:-1])
 
     # Check >=, <= before >, <
     field_operators = [':', '>=', '<=', '<', '>']
@@ -140,15 +144,21 @@ class Expense:
     else:
       result = Expense(self._FindAllFields(query))
 
-    if inverse:
-      result = self._GetComplementSet(result)
-
     return result
 
   def _GetComplementSet(self, subset) -> Expense:
     return Expense([exp for exp in self.expenses if exp not in subset.expenses])
 
   def Query(self, query) -> Expense:
+    """
+    Not rigorous definition:
+      query  := <token> <query> | <token> OR <query> | <token>
+      token  := (<query>) | -<token> | <value> | <field><op><value>
+      field  := 'id' | 'date' | 'major_component' | 'minor_component' |
+                'amount' | 'description' | 'label'
+      value  := \w+
+      op     := : | > | < | >= | <=
+    """
 
     def Union(exp1, exp2):
       return list(set(exp1.expenses).union(set(exp2.expenses)))
