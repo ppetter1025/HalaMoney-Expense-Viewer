@@ -13,8 +13,15 @@ def _GetIdList(result):
 class TokenizeTest(unittest.TestCase):
 
   def testTokenize(self):
-    self.assertEqual(Tokenize('(拉麵 OR amount>=500) OR date>2020-06-25'),
-        ['(拉麵 OR amount>=500)', 'OR', 'date>2020-06-25'])
+    self.assertEqual(
+        Tokenize('  -(拉麵 OR amount>=500) OR (date>2020-06-25)  --amount>=100'),
+        ['-(拉麵 OR amount>=500)', 'OR', '(date>2020-06-25)', '--amount>=100'])
+
+  def testTokenizeInvalidParentheses(self):
+    with self.assertRaises(ValueError):
+      Tokenize('( () ')
+    with self.assertRaises(ValueError):
+      Tokenize('( )) ')
 
   def testTokenizeEmptyStr(self):
     self.assertEqual(Tokenize(''), [])

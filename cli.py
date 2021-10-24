@@ -55,26 +55,25 @@ COMPARABLE_FIELDS = [
 ]
 
 def Tokenize(s):
-  s.strip()
+  s = s.strip()
   if s == '':
     return []
 
-  if s[0] == '(':
-    # Find matching parenthesis
-    cnt = 1
-    for i in range(1, len(s)):
-      if s[i] == '(':
-        cnt += 1
-      if s[i] == ')':
-        cnt -= 1
-      if cnt == 0:
-        return [s[:i+1]] + Tokenize(s[i+2:])
-    raise ValueError('Failed to parse the query')
-
-  splitted = s.split(' ', 1)
-  if len(splitted) == 1:
-    return splitted
-  return splitted[:1] + Tokenize(splitted[1])
+  cnt = 0
+  for i in range(len(s)):
+    if s[i] == '(':
+      cnt += 1
+    if s[i] == ')':
+      cnt -= 1
+    if cnt < 0:
+      raise ValueError('Too many right parentheses.')
+    if s[i] == ' ' and cnt == 0:
+      return [s[:i]] + Tokenize(s[i+1:])
+      continue
+  else:
+    if cnt > 0:
+      raise ValueError('Missing right parentheses.')
+    return [s]
 
 class Expense:
 
