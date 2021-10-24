@@ -5,6 +5,7 @@ import unittest
 import csv
 
 from cli import Expense
+from cli import QueryHelper
 from cli import Tokenize
 
 def _GetIdList(result):
@@ -30,12 +31,16 @@ class ExpenseTest(unittest.TestCase):
 
   @classmethod
   def setUpClass(cls):
+    cls.helper = QueryHelper()
     with open('expense.csv', 'r') as fp:
       cls.expense = Expense(list(csv.DictReader(fp)))
 
   def _QueryTestHelper(self, query, expected_ids):
-    result = self.expense.Query(query)
+    result = self.helper.Query(self.expense, query)
     self.assertEqual(_GetIdList(result.expenses), expected_ids)
+
+  def testQueryEmpty(self):
+    self._QueryTestHelper('', [str(i+1) for i in range(8)])
 
   def testQueryText(self):
     self._QueryTestHelper('拉麵', ['1', '7', '8'])

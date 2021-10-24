@@ -76,112 +76,21 @@ def Tokenize(s):
     return [s]
 
 class Expense:
+  UNIVERSAL_SET = '__UNIVERSAL_SET__'
 
-  def __init__(self, expenses: list):
-    assert isinstance(expenses, list)
+  def __init__(self, expenses):
+    assert isinstance(expenses, list) or expenses == self.UNIVERSAL_SET
     self.expenses = expenses
 
-  def _FindAllFields(self, subquery) -> list:
-    return_list = []
-    for expense in self.expenses:
-      for field, value in expense.items():
-        if subquery in value:
-          return_list += [expense]
-          break
-    return return_list
+  def Union(self, exp):
+    return list(set(self.expenses).union(set(exp.expenses)))
 
-  def _FindOneField(self, field, op, field_query) -> list:
-    def hit(field, op, field_query, value):
-      if op == ':':
-        return field_query in value
-
-      if field not in COMPARABLE_FIELDS:
-        logging.error('Uncomparable field: %s', field)
-        raise ValueError('Field %s is not comparable.', field)
-
-      if field == 'date':
-        field_query = datetime.datetime.fromisoformat(
-            field_query.replace('/', '-'))
-        value = datetime.datetime.fromisoformat(value.replace('/', '-'))
-      else:
-        value = int(value)
-        field_query = int(field_query)
-      if op == '<':
-        return value < field_query
-      if op == '>':
-        return value > field_query
-      if op == '<=':
-        return value <= field_query
-      if op == '>=':
-        return value >= field_query
-
-      assert False
-
-    return_list = []
-    for expense in self.expenses:
-      if hit(field, op, field_query, expense[FIELD_MAPPING[field]]):
-        return_list += [expense]
-
-    return return_list
-
-  def _QueryOneToken(self, query) -> Expense:
-    if query.startswith('-'):
-      return self._GetComplementSet(self._QueryOneToken(query[1:]))
-
-    if query.startswith('('):
-      assert query[-1] == ')'
-      return self.Query(query[1:-1])
-
-    # Check >=, <= before >, <
-    field_operators = [':', '>=', '<=', '<', '>']
-    for op in field_operators:
-      if op in query:
-        query = query.replace(op, ' ')
-        assert len(query.split()) == 2
-        field, field_query = query.split(' ', 1)
-        result = Expense(self._FindOneField(field, op, field_query))
-        break
-    else:
-      result = Expense(self._FindAllFields(query))
-
-    return result
-
-  def _GetComplementSet(self, subset) -> Expense:
-    return Expense([exp for exp in self.expenses if exp not in subset.expenses])
-
-  def Query(self, query) -> Expense:
-    """
-    Not rigorous definition:
-      query  := <token> <query> | <token> OR <query> | <token>
-      token  := (<query>) | -<token> | <value> | <field><op><value>
-      field  := 'id' | 'date' | 'major_component' | 'minor_component' |
-                'amount' | 'description' | 'label'
-      value  := \w+
-      op     := : | > | < | >= | <=
-    """
-
-    def Union(exp1, exp2):
-      return list(set(exp1.expenses).union(set(exp2.expenses)))
-
-    def Intersection(exp1, exp2):
-      if exp1 is None or exp2 is None:
-        return exp1 if exp2 is None else exp2
-      return Expense(
-          [value for value in exp1.expenses if value in exp2.expenses])
-
-    tokens = Tokenize(query)
-    if tokens == []:
-        return self
-
-    if len(tokens) == 1:
-      result = self._QueryOneToken(tokens[0])
-    else:
-      # Use None as universal set.
-      result = None
-      for token in tokens:
-        result = Intersection(result, self.Query(token))
-
-    return result
+  def Intersection(self, exp):
+    if (self.expenses == self.UNIVERSAL_SET or
+        exp.expenses == self.UNIVERSAL_SET):
+      return self if exp.expenses == self.UNIVERSAL_SET else exp
+    return Expense(
+        [value for value in self.expenses if value in exp.expenses])
 
   def TotalAmount(self):
     return sum([int(expense[FIELD_MAPPING['amount']]) for expense in
@@ -213,6 +122,102 @@ class Expense:
     if base_total_amount is not None and base_total_amount != 0:
       print(', 佔全部比例 %.2f%%' % (100.0*self.TotalAmount()/base_total_amount))
 
+class QueryHelper:
+
+  def _FindAllFields(self, expenses, subquery) -> list:
+    return_list = []
+    for expense in expenses.expenses:
+      for field, value in expense.items():
+        if subquery in value:
+          return_list += [expense]
+          break
+    return return_list
+
+  def _FindOneField(self, expenses, field, op, field_query) -> list:
+    def hit(field, op, field_query, value):
+      if op == ':':
+        return field_query in value
+
+      if field not in COMPARABLE_FIELDS:
+        logging.error('Uncomparable field: %s', field)
+        raise ValueError('Field %s is not comparable.', field)
+
+      if field == 'date':
+        field_query = datetime.datetime.fromisoformat(
+            field_query.replace('/', '-'))
+        value = datetime.datetime.fromisoformat(value.replace('/', '-'))
+      else:
+        value = int(value)
+        field_query = int(field_query)
+      if op == '<':
+        return value < field_query
+      if op == '>':
+        return value > field_query
+      if op == '<=':
+        return value <= field_query
+      if op == '>=':
+        return value >= field_query
+
+      assert False
+
+    return_list = []
+    for expense in expenses.expenses:
+      if hit(field, op, field_query, expense[FIELD_MAPPING[field]]):
+        return_list += [expense]
+
+    return return_list
+
+  def _QueryOneToken(self, expenses, query) -> Expense:
+    if query.startswith('-'):
+      return self._GetComplementSet(self._QueryOneToken(expenses, query[1:]),
+                                    expenses)
+
+    if query.startswith('('):
+      assert query[-1] == ')'
+      return self.Query(expenses, query[1:-1])
+
+    # Check >=, <= before >, <
+    field_operators = [':', '>=', '<=', '<', '>']
+    for op in field_operators:
+      if op in query:
+        query = query.replace(op, ' ')
+        assert len(query.split()) == 2
+        field, field_query = query.split(' ', 1)
+        result = Expense(self._FindOneField(expenses, field, op, field_query))
+        break
+    else:
+      result = Expense(self._FindAllFields(expenses, query))
+
+    return result
+
+  def _GetComplementSet(self, subset, expenses) -> Expense:
+    return Expense(
+        [exp for exp in expenses.expenses if exp not in subset.expenses])
+
+  def Query(self, expenses, query) -> Expense:
+    """
+    Not rigorous definition:
+      query  := <token> <query> | <token> OR <query> | <token>
+      token  := (<query>) | -<token> | <value> | <field><op><value>
+      field  := 'id' | 'date' | 'major_component' | 'minor_component' |
+                'amount' | 'description' | 'label'
+      value  := \w+
+      op     := : | > | < | >= | <=
+    """
+
+    tokens = Tokenize(query)
+    if tokens == []:
+        return expenses
+
+    if len(tokens) == 1:
+      result = self._QueryOneToken(expenses, tokens[0])
+    else:
+      result = Expense(Expense.UNIVERSAL_SET)
+      for token in tokens:
+        result = result.Intersection(self.Query(expenses, token))
+
+    return result
+
 
 def main():
   parser = argparse.ArgumentParser(
@@ -233,13 +238,14 @@ def main():
     csv_file_fp = open(args.input_file, 'r')
 
   all_expenses = Expense(list(csv.DictReader(csv_file_fp)))
+  helper = QueryHelper()
 
   if args.base_query is not None:
-    base_expenses = all_expenses.Query(args.base_query)
+    base_expenses = helper.Query(all_expenses, args.base_query)
   else:
     base_expenses = all_expenses
 
-  base_expenses.Query(args.query).Output(base_expenses.TotalAmount())
+  helper.Query(base_expenses, args.query).Output(base_expenses.TotalAmount())
 
 
 if __name__ == '__main__':
