@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
 import argparse
 import csv
 import datetime
@@ -52,7 +54,6 @@ COMPARABLE_FIELDS = [
     'amount'
 ]
 
-
 def Tokenize(s):
   s.strip()
   if s == '':
@@ -81,7 +82,7 @@ class Expense:
     assert isinstance(expenses, list)
     self.expenses = expenses
 
-  def QueryAllFields(self, subquery):
+  def _FindAllFields(self, subquery) -> list:
     return_list = []
     for expense in self.expenses:
       for field, value in expense.items():
@@ -90,7 +91,7 @@ class Expense:
           break
     return return_list
 
-  def QueryField(self, field, op, field_query):
+  def _FindOneField(self, field, op, field_query) -> list:
     def hit(field, op, field_query, value):
       if op == ':':
         return field_query in value
@@ -124,7 +125,10 @@ class Expense:
 
     return return_list
 
-  def QueryOne(self, query):
+  def _QueryOneToken(self, query) -> Expense:
+    inverse = query.startswith('-')
+    query = query.lstrip('-')
+
     # Check >=, <= before >, <
     field_operators = [':', '>=', '<=', '<', '>']
     for op in field_operators:
@@ -132,11 +136,20 @@ class Expense:
         query = query.replace(op, ' ')
         assert len(query.split()) == 2
         field, field_query = query.split(' ', 1)
-        return self.QueryField(field, op, field_query)
+        result = Expense(self._FindOneField(field, op, field_query))
+        break
+    else:
+      result = Expense(self._FindAllFields(query))
 
-    return self.QueryAllFields(query)
+    if inverse:
+      result = self._GetComplementSet(result)
 
-  def Query(self, query):
+    return result
+
+  def _GetComplementSet(self, subset) -> Expense:
+    return Expense([exp for exp in self.expenses if exp not in subset.expenses])
+
+  def Query(self, query) -> Expense:
 
     def Union(exp1, exp2):
       return list(set(exp1.expenses).union(set(exp2.expenses)))
@@ -144,19 +157,20 @@ class Expense:
     def Intersection(exp1, exp2):
       if exp1 is None or exp2 is None:
         return exp1 if exp2 is None else exp2
-      return Expense([value for value in exp1.expenses if value in exp2.expenses])
+      return Expense(
+          [value for value in exp1.expenses if value in exp2.expenses])
 
     tokens = Tokenize(query)
     if tokens == []:
         return self
 
     if len(tokens) == 1:
-      return Expense(self.QueryOne(tokens[0]))
-
-    # Use None as universal set.
-    result = None
-    for token in tokens:
-      result = Intersection(result, self.Query(token))
+      result = self._QueryOneToken(tokens[0])
+    else:
+      # Use None as universal set.
+      result = None
+      for token in tokens:
+        result = Intersection(result, self.Query(token))
 
     return result
 
@@ -192,7 +206,8 @@ class Expense:
 
 
 def main():
-  parser = argparse.ArgumentParser(epilog='Supported keywords: %r' % list(FIELD_MAPPING.keys()))
+  parser = argparse.ArgumentParser(
+      epilog='Supported keywords: %r' % list(FIELD_MAPPING.keys()))
   parser.add_argument('-q', '--query', dest='query', type=str, default='',
                       help='Query string')
   parser.add_argument('-b', '--base-query', dest='base_query',
