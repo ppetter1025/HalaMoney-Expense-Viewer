@@ -82,8 +82,30 @@ class Expense:
     assert isinstance(expenses, list) or expenses == self.UNIVERSAL_SET
     self.expenses = expenses
 
-  def Union(self, exp):
-    return list(set(self.expenses).union(set(exp.expenses)))
+  def Union(self, exp) -> Expense:
+    # Cleaner union implementation.
+    exp1, exp2 = self.expenses, exp.expenses
+    if (self.expenses == self.UNIVERSAL_SET or
+        exp.expenses == self.UNIVERSAL_SET):
+      return Expense(self.UNIVERSAL_SET)
+
+    i, j = 0, 0
+    ret = []
+    while i < len(exp1) and j < len(exp2):
+      if exp1[i]['Id'] == exp2[j]['Id']:
+        ret += [exp1[i]]
+        i += 1
+        j += 1
+      elif exp1[i]['Id'] < exp2[j]['Id']:
+        ret += [exp1[i]]
+        i += 1
+      else:
+        ret += [exp2[j]]
+        j += 1
+    ret += exp1[i:]
+    ret += exp2[j:]
+
+    return Expense(ret)
 
   def Intersection(self, exp):
     if (self.expenses == self.UNIVERSAL_SET or
@@ -210,11 +232,25 @@ class QueryHelper:
         return expenses
 
     if len(tokens) == 1:
-      result = self._QueryOneToken(expenses, tokens[0])
-    else:
-      result = Expense(Expense.UNIVERSAL_SET)
-      for token in tokens:
-        result = result.Intersection(self.Query(expenses, token))
+      return self._QueryOneToken(expenses, tokens[0])
+
+    tmp = Expense(Expense.UNIVERSAL_SET)
+    intersected_expenses = []
+    for token in tokens:
+      if token == 'OR':
+        if tmp.expenses == Expense.UNIVERSAL_SET:
+          raise ValueError('Invalid query.')
+
+        intersected_expenses += [tmp]
+        tmp = Expense(Expense.UNIVERSAL_SET)
+      else:
+        tmp = tmp.Intersection(self._QueryOneToken(expenses, token))
+
+    intersected_expenses += [tmp]
+
+    result = Expense([])
+    for exp in intersected_expenses:
+      result = result.Union(exp)
 
     return result
 

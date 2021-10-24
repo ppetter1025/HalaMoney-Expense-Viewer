@@ -27,7 +27,67 @@ class TokenizeTest(unittest.TestCase):
   def testTokenizeEmptyStr(self):
     self.assertEqual(Tokenize(''), [])
 
+
 class ExpenseTest(unittest.TestCase):
+
+  @classmethod
+  def setUpClass(cls):
+    cls.exp1 = Expense([
+      {'Id': '1'},
+      {'Id': '2'},
+      {'Id': '3'},
+    ])
+    cls.exp2 = Expense([
+      {'Id': '2'},
+      {'Id': '3'},
+      {'Id': '4'},
+    ])
+    with open('expense.csv', 'r') as fp:
+      cls.expense = Expense(list(csv.DictReader(fp)))
+
+  def testIntersection(self):
+    self.assertEqual(
+        [entry['Id'] for entry in self.exp1.Intersection(self.exp2).expenses],
+        ['2', '3'])
+
+  def testIntersectionUniversalSet(self):
+    universal_expense = Expense(Expense.UNIVERSAL_SET)
+    self.assertEqual(self.expense.Intersection(universal_expense),
+                     self.expense)
+    self.assertEqual(universal_expense.Intersection(self.expense),
+                     self.expense)
+
+  def testIntersectionEmptySet(self):
+    empty_expense = Expense([])
+    self.assertEqual(self.expense.Intersection(empty_expense).expenses,
+                     [])
+    self.assertEqual(empty_expense.Intersection(self.expense).expenses,
+                     [])
+
+  def testUnion(self):
+    self.assertEqual(
+        [entry['Id'] for entry in self.exp1.Union(self.exp2).expenses],
+        ['1', '2', '3', '4'])
+
+  def testUnionUniversalSet(self):
+    universal_expense = Expense(Expense.UNIVERSAL_SET)
+    self.assertEqual(self.expense.Union(universal_expense).expenses,
+                     Expense.UNIVERSAL_SET)
+    self.assertEqual(universal_expense.Union(self.expense).expenses,
+                     Expense.UNIVERSAL_SET)
+
+  def testUnionEmptySet(self):
+    empty_expense = Expense([])
+    self.assertEqual(self.expense.Union(empty_expense).expenses,
+                     self.expense.expenses)
+    self.assertEqual(empty_expense.Union(self.expense).expenses,
+                     self.expense.expenses)
+
+  def testTotalAmount(self):
+    total_amount = self.expense.TotalAmount()
+    self.assertEqual(total_amount, 2300)
+
+class QueryHelperTest(unittest.TestCase):
 
   @classmethod
   def setUpClass(cls):
@@ -60,17 +120,11 @@ class ExpenseTest(unittest.TestCase):
   def testQueryMultipleParentheses(self):
     self._QueryTestHelper('(((-東門 -amount>=250)))', ['4', '6', '8'])
 
-  """
   def testQueryOr(self):
     self._QueryTestHelper('東門 OR amount>=500', ['2', '3', '5'])
 
   def testQueryOrWithParenthesis(self):
     self._QueryTestHelper('東門 OR amount>=500', ['2', '3', '5'])
-  """
-
-  def testTotalAmount(self):
-    total_amount = self.expense.TotalAmount()
-    self.assertEqual(total_amount, 2300)
 
 
 if __name__ == '__main__':
